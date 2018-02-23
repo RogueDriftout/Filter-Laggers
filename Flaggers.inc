@@ -80,7 +80,6 @@ enum FLAGGERS_PLAYER_INFO
 	bool:FLlagger,
 	bool:FLdcheck,
 	bool:FLspawn,
-	bool:FLTSet,
 
 	Float:FLPackets,
 
@@ -89,6 +88,7 @@ enum FLAGGERS_PLAYER_INFO
 	FLAmmo,
 	FLPing,
 
+	FLTSet,
 	FLTimer
 
 };
@@ -111,7 +111,7 @@ stock Float:FL_GetPlayerPacketloss(playerid) // Made by Fusez
 public OnPlayerConnect(playerid)
 {
 	FLaggers_Player[playerid][FLspawn] = false;
-	FLaggers_Player[playerid][FLTSet]  = false;
+
 	FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
 	FLaggers_Player[playerid][FLPing] = INVALID_PLAYER_STATS;
 
@@ -129,7 +129,6 @@ public OnPlayerDisconnect(playerid, reason)
 	FLaggers_Player[playerid][FLdesynced] = false;
 	FLaggers_Player[playerid][FLlagger]   = false;
 	FLaggers_Player[playerid][FLdcheck]   = false;
-	FLaggers_Player[playerid][FLTSet]     = false;
 	FLaggers_Player[playerid][FLspawn]    = false;
 
 	FLaggers_Player[playerid][FLwarns]    = 0;
@@ -177,7 +176,7 @@ public OnPlayerUpdate(playerid)
 public OnPlayerSpawn(playerid)
 {
 	FLaggers_Player[playerid][FLspawn] = false;
-	if(!FLaggers_Player[playerid][FLTSet]) FLaggers_Player[playerid][FLTSet] = true, SetTimerEx("FL_Spawned", 5000, false, "i", playerid);
+	FLaggers_Player[playerid][FLTSet] = SetTimerEx("FL_Spawned", 5000, false, "i", playerid);
 		#if defined FL_OnPlayerSpawn
 	return FL_OnPlayerSpawn(playerid);
 		#else
@@ -187,6 +186,7 @@ public OnPlayerSpawn(playerid)
 
 public OnPlayerDeath(playerid, killerid, reason)
 {
+	KillTimer(FLaggers_Player[playerid][FLTSet]);
 	FLaggers_Player[playerid][FLspawn] = false;
 		#if defined FL_FL_OnPlayerDeath
 	return FL_OnPlayerDeath(playerid, killerid, reason);
@@ -195,7 +195,7 @@ public OnPlayerDeath(playerid, killerid, reason)
 		#endif
 }
 
-public FL_Spawned(playerid) return FLaggers_Player[playerid][FLspawn] = true, FLaggers_Player[playerid][FLTSet] = false;
+public FL_Spawned(playerid) return FLaggers_Player[playerid][FLspawn] = true;
 
 public FL_CheckStats(playerid)
 {
@@ -214,7 +214,7 @@ public FL_CheckStats(playerid)
 			FLaggers_Player[playerid][FLwarns]++, 
 			FLaggers_Player[playerid][FLPing] = FL_PING;
 		}
-		
+
 		else if(FLaggers_Player[playerid][FLPing] != INVALID_PLAYER_STATS) 
 		{
 			if(FLaggers_Player[playerid][FLwarns] > 0 ) FLaggers_Player[playerid][FLwarns]--;
