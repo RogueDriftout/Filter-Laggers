@@ -48,6 +48,7 @@ Defeinitions to use:
 #endif
 
 forward FL_CheckStats(playerid);
+forward FL_Spawned(playerid);
 
 #if defined OnPlayerLagout
 	forward OnPlayerLagout(playerid, lagtype, ping, Float:packetloss);
@@ -79,6 +80,7 @@ enum FLAGGERS_PLAYER_INFO
 	bool:FLlagger,
 	bool:FLdcheck,
 	bool:FLspawn,
+	bool:FLTSet,
 
 	Float:FLPackets,
 
@@ -92,12 +94,10 @@ enum FLAGGERS_PLAYER_INFO
 };
 
 new 
-	FLaggers_Player[MAX_PLAYERS char][FLAGGERS_PLAYER_INFO];
+	FLaggers_Player[MAX_PLAYERS][FLAGGERS_PLAYER_INFO];
 
 stock Float:FL_GetPlayerPacketloss(playerid) // Made by Fusez
 {
-    if(!IsPlayerConnected(playerid)) return 0.0;
-
     new nstats[400+1], nstats_loss[20], start, end;
     GetPlayerNetworkStats(playerid, nstats, sizeof(nstats));
 
@@ -110,6 +110,8 @@ stock Float:FL_GetPlayerPacketloss(playerid) // Made by Fusez
 
 public OnPlayerConnect(playerid)
 {
+	FLaggers_Player[playerid][FLspawn] = false;
+	FLaggers_Player[playerid][FLTSet]  = false;
 	FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
 	FLaggers_Player[playerid][FLPing] = INVALID_PLAYER_STATS;
 
@@ -126,8 +128,9 @@ public OnPlayerDisconnect(playerid, reason)
 {
 	FLaggers_Player[playerid][FLdesynced] = false;
 	FLaggers_Player[playerid][FLlagger]   = false;
-	FLaggers_Player[playerid][FLspawn]    = false;
 	FLaggers_Player[playerid][FLdcheck]   = false;
+	FLaggers_Player[playerid][FLTSet]     = false;
+	FLaggers_Player[playerid][FLspawn]    = false;
 
 	FLaggers_Player[playerid][FLwarns]    = 0;
 
@@ -148,15 +151,15 @@ public OnPlayerUpdate(playerid)
 		new
 		    FLaggersWep,
 			FlaggersAmmo;
-			
+
 		FLaggers_Player[playerid][FLTicks] = gettime()+FL_MAX_WAIT_TIME;
 	    GetPlayerWeaponData(playerid, 0, FLaggersWep, FlaggersAmmo);
 		
-		if(FlaggersAmmo == FLaggers_Player[playerid][FLAmmo])
+		if(FlaggersAmmo != FLaggers_Player[playerid][FLAmmo] && FLaggers_Player[playerid][FLspawn])
 		{
 			FLaggers_Player[playerid][FLdesynced] = true;
 			#if defined OnPlayerLagout
-			OnPlayerLagout(playerid, 1, FL_PING, FL_PACKETS);
+			OnPlayerLagout(playerid, 2, GetPlayerPing(playerid), FL_GetPlayerPacketloss(playerid));
 			#endif
 		}
 		else FLaggers_Player[playerid][FLdesynced] = false;
@@ -164,7 +167,6 @@ public OnPlayerUpdate(playerid)
 		SetPlayerAmmo(playerid, FLaggersWep, (FlaggersAmmo == 0) ? 1 : 0);
 		FLaggers_Player[playerid][FLAmmo] = FlaggersAmmo;
 	}
-
 		#if defined FL_OnPlayerUpdate
 	return FL_OnPlayerUpdate(playerid);
 		#else
@@ -174,8 +176,8 @@ public OnPlayerUpdate(playerid)
 
 public OnPlayerSpawn(playerid)
 {
-	FLaggers_Player[playerid][FLspawn] = true;
-
+	FLaggers_Player[playerid][FLspawn] = false;
+	if(!FLaggers_Player[playerid][FLTSet]) FLaggers_Player[playerid][FLTSet] = true, SetTimerEx("FL_Spawned", 5000, false, "i", playerid);
 		#if defined FL_OnPlayerSpawn
 	return FL_OnPlayerSpawn(playerid);
 		#else
@@ -186,7 +188,6 @@ public OnPlayerSpawn(playerid)
 public OnPlayerDeath(playerid, killerid, reason)
 {
 	FLaggers_Player[playerid][FLspawn] = false;
-
 		#if defined FL_FL_OnPlayerDeath
 	return FL_OnPlayerDeath(playerid, killerid, reason);
 		#else
@@ -194,11 +195,12 @@ public OnPlayerDeath(playerid, killerid, reason)
 		#endif
 }
 
+public FL_Spawned(playerid) return FLaggers_Player[playerid][FLspawn] = true, FLaggers_Player[playerid][FLTSet] = false;
+
 public FL_CheckStats(playerid)
 {
 	new FL_PING = GetPlayerPing(playerid);
 	new Float:FL_PACKETS = FL_GetPlayerPacketloss(playerid);
-	
 	if(FLaggers_Player[playerid][FLwarns] < FL_MAX_WARNINGS && FLaggers_Player[playerid][FLspawn])
 	{
 		//Ping filter:
@@ -206,14 +208,13 @@ public FL_CheckStats(playerid)
 		{
 			FLaggers_Player[playerid][FLPing] = FL_PING;
 		}
-
 		else if(FL_PING > FLaggers_Player[playerid][FLPing] && FLaggers_Player[playerid][FLPing] != INVALID_PLAYER_STATS)
 		{
 
 			FLaggers_Player[playerid][FLwarns]++, 
 			FLaggers_Player[playerid][FLPing] = FL_PING;
 		}
-
+		
 		else if(FLaggers_Player[playerid][FLPing] != INVALID_PLAYER_STATS) 
 		{
 			if(FLaggers_Player[playerid][FLwarns] > 0 ) FLaggers_Player[playerid][FLwarns]--;
@@ -238,7 +239,6 @@ public FL_CheckStats(playerid)
 			FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
 		}
 	}
-
 	//Final-Stage filter:
 	else if(FLaggers_Player[playerid][FLspawn] && FLaggers_Player[playerid][FLwarns] >= FL_MAX_WARNINGS)
 	{
