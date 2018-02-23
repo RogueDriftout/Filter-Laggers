@@ -15,7 +15,7 @@ IsPlayerDesynced(playerid);
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=
 Defeinitions to use:
 -=-=-=-=-=-=-=-=-=-=
-#define FL_MAX_WAIT_TIME		[number]			( max wait time for the c-sync redo )
+#define FL_MAX_WAIT_TIME	    [number]			( max wait time for the c-sync redo )
 #define FL_MAX_LAG_PING 	    [number]   			( max ping to set a warning         )
 #define FL_MAX_PACKETLOSS 	    [number] 			( max packet loss to set a warning  )
 #define FL_MAX_WARNINGS 	    [number]   			( max warnings to call the callback )
