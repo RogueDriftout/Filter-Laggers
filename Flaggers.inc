@@ -31,6 +31,8 @@ Defeinitions to use:
 
 #include <a_samp>
 
+#if !defined FILTERSCRIPT
+
 #if !defined FL_MAX_LAG_PING
 	#define FL_MAX_LAG_PING 500
 #endif
@@ -47,8 +49,11 @@ Defeinitions to use:
 	#define FL_MAX_WARNINGS 3
 #endif
 
+forward FL_GivePlayerWeapon(playerid, weaponid, ammo);
+forward FL_SetPlayerAmmo(playerid, weaponid, ammo);
+forward FL_ResetPlayerWeapons(playerid);
+
 forward FL_CheckStats(playerid);
-forward FL_Spawned(playerid);
 
 #if defined OnPlayerLagout
 	forward OnPlayerLagout(playerid, lagtype, ping, Float:packetloss);
@@ -56,10 +61,6 @@ forward FL_Spawned(playerid);
 
 #if defined FL_OnPlayerConnect
 	forward FL_OnPlayerConnect(playerid);
-#endif
-
-#if defined FL_OnPlayerUpdate
-	forward FL_OnPlayerUpdate(playerid);
 #endif
 
 #if defined FL_OnPlayerDisconnect
@@ -70,6 +71,10 @@ forward FL_Spawned(playerid);
 	forward FL_OnPlayerSpawn(playerid);
 #endif
 
+#if defined FL_OnPlayerUpdate
+	forward FL_OnPlayerUpdate(playerid);
+#endif
+
 #if defined FL_OnPlayerDeath
 	forward FL_OnPlayerDeath(playerid, killerid, reason);
 #endif
@@ -78,7 +83,6 @@ enum FLAGGERS_PLAYER_INFO
 {
 	bool:FLdesynced,
 	bool:FLlagger,
-	bool:FLdcheck,
 	bool:FLspawn,
 
 	Float:FLPackets,
@@ -88,34 +92,141 @@ enum FLAGGERS_PLAYER_INFO
 	FLAmmo,
 	FLPing,
 
-	FLTSet,
 	FLTimer
-
 };
 
 new 
 	FLaggers_Player[MAX_PLAYERS][FLAGGERS_PLAYER_INFO];
 
+//Inner functions:
 stock Float:FL_GetPlayerPacketloss(playerid) // Made by Fusez
 {
-    new nstats[400+1], nstats_loss[20], start, end;
+    new nstats[400+1], nstats_loss[20], fstart, fend;
+
     GetPlayerNetworkStats(playerid, nstats, sizeof(nstats));
-
-    start = strfind(nstats,"packetloss",true);
-    end = strfind(nstats,"%",true,start);
-
-    strmid(nstats_loss, nstats, start+12, end, sizeof(nstats_loss));
+    fstart = strfind(nstats,"packetloss",true);
+    fend = strfind(nstats,"%",true,fstart);
+    strmid(nstats_loss, nstats, fstart+12, fend, sizeof(nstats_loss));
     return floatstr(nstats_loss);
+}
+
+stock FL_GetWeaponSlot(weaponid) 
+{ 
+    switch(weaponid) 
+    { 
+        case 0..1:   return 0;
+        case 2..9:   return 1;
+        case 22..24: return 2;
+        case 25..27: return 3;
+        case 28..29: return 4;
+        case 32:     return 4;
+        case 30..31: return 5;
+        case 33..34: return 6;
+        case 35..38: return 7;
+        case 16..18: return 8;
+        case 39:     return 8;
+        case 41..43: return 9;
+        case 10..15: return 10;
+        case 44..46: return 11;
+        case 40: 	 return 12;
+    } 
+    return -1; 
+}
+
+stock IsPlayerLagging(playerid)
+{
+	if(FLaggers_Player[playerid][FLwarns] > 1) return 1;
+	else return 0;
+}
+
+stock IsPlayerDesynced(playerid) return FLaggers_Player[playerid][FLdesynced];
+
+//Hooked functions:
+public FL_GivePlayerWeapon(playerid, weaponid, ammo)
+{
+	if(FL_GetWeaponSlot(weaponid) == 0) 
+	{
+		switch(weaponid)
+		{
+			case 0:
+			{
+				GivePlayerWeapon(playerid, weaponid, ammo);
+				SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]);
+			}
+			case 1:
+			{
+				GivePlayerWeapon(playerid, weaponid, ammo);
+				SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]);
+			}
+		}
+	}
+	else GivePlayerWeapon(playerid, weaponid, ammo);
+	return 1;
+}
+
+public FL_SetPlayerAmmo(playerid, weaponid, ammo)
+{
+	if(FL_GetWeaponSlot(weaponid) == 0) return SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]);
+	else SetPlayerAmmo(playerid, weaponid, ammo);
+	return 1;
+}
+
+public FL_ResetPlayerWeapons(playerid)
+{
+	ResetPlayerWeapons(playerid);
+	SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]);
+	return 1;
+}
+
+//Hooked callbacks:
+public OnPlayerUpdate(playerid)
+{
+	if(gettime() > FLaggers_Player[playerid][FLTicks])
+	{
+		//Desync filter:
+		if(FLaggers_Player[playerid][FLspawn])
+		{
+			new
+		    	FLaggersWep,
+				FlaggersAmmo;
+			GetPlayerWeaponData(playerid, 0, FLaggersWep, FlaggersAmmo);
+			FLaggers_Player[playerid][FLTicks] = gettime()+FL_MAX_WAIT_TIME;
+
+			switch(FLaggers_Player[playerid][FLAmmo])
+			{
+				case 0:
+				{
+					FLaggers_Player[playerid][FLAmmo] = 1;
+					SetPlayerAmmo(playerid, FLaggersWep, 1);
+				}
+				case 1:
+				{
+					if(FlaggersAmmo != FLaggers_Player[playerid][FLAmmo])
+					{
+						FLaggers_Player[playerid][FLdesynced] = true;
+						#if defined OnPlayerLagout
+						OnPlayerLagout(playerid, 2, GetPlayerPing(playerid), FL_GetPlayerPacketloss(playerid));
+						#endif
+					}
+					FLaggers_Player[playerid][FLAmmo] = 0;
+					SetPlayerAmmo(playerid, FLaggersWep, 0);
+				}
+			}
+		}
+	}
+		#if defined FL_OnPlayerUpdate
+	return FL_OnPlayerUpdate(playerid);
+		#else
+	return 1;
+		#endif
 }
 
 public OnPlayerConnect(playerid)
 {
-	FLaggers_Player[playerid][FLspawn] = false;
-
 	FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
 	FLaggers_Player[playerid][FLPing] = INVALID_PLAYER_STATS;
 
-	FLaggers_Player[playerid][FLTimer] = SetTimerEx("FL_CheckStats", 5000, true, "i", playerid);
+	FLaggers_Player[playerid][FLTimer] = SetTimerEx("FL_CheckStats", 3000, true, "i", playerid);
 
 		#if defined FL_OnPlayerConnect
 	return FL_OnPlayerConnect(playerid);
@@ -128,9 +239,9 @@ public OnPlayerDisconnect(playerid, reason)
 {
 	FLaggers_Player[playerid][FLdesynced] = false;
 	FLaggers_Player[playerid][FLlagger]   = false;
-	FLaggers_Player[playerid][FLdcheck]   = false;
-	FLaggers_Player[playerid][FLspawn]    = false;
+	FLaggers_Player[playerid][FLspawn] 	  = false;
 
+	FLaggers_Player[playerid][FLAmmo] 	  = 0;
 	FLaggers_Player[playerid][FLwarns]    = 0;
 
 	KillTimer(FLaggers_Player[playerid][FLTimer]);
@@ -142,41 +253,10 @@ public OnPlayerDisconnect(playerid, reason)
 		#endif
 }
 
-public OnPlayerUpdate(playerid)
-{
-	//Desync filter:
-	if(gettime() > FLaggers_Player[playerid][FLTicks])
-	{
-		new
-		    FLaggersWep,
-			FlaggersAmmo;
-
-		FLaggers_Player[playerid][FLTicks] = gettime()+FL_MAX_WAIT_TIME;
-	    GetPlayerWeaponData(playerid, 0, FLaggersWep, FlaggersAmmo);
-		
-		if(FlaggersAmmo != FLaggers_Player[playerid][FLAmmo] && FLaggers_Player[playerid][FLspawn])
-		{
-			FLaggers_Player[playerid][FLdesynced] = true;
-			#if defined OnPlayerLagout
-			OnPlayerLagout(playerid, 2, GetPlayerPing(playerid), FL_GetPlayerPacketloss(playerid));
-			#endif
-		}
-		else FLaggers_Player[playerid][FLdesynced] = false;
-
-		SetPlayerAmmo(playerid, FLaggersWep, (FlaggersAmmo == 0) ? 1 : 0);
-		FLaggers_Player[playerid][FLAmmo] = FlaggersAmmo;
-	}
-		#if defined FL_OnPlayerUpdate
-	return FL_OnPlayerUpdate(playerid);
-		#else
-	return 1;
-		#endif
-}
-
 public OnPlayerSpawn(playerid)
 {
-	FLaggers_Player[playerid][FLspawn] = false;
-	FLaggers_Player[playerid][FLTSet] = SetTimerEx("FL_Spawned", 5000, false, "i", playerid);
+	FLaggers_Player[playerid][FLspawn] = true;
+
 		#if defined FL_OnPlayerSpawn
 	return FL_OnPlayerSpawn(playerid);
 		#else
@@ -186,8 +266,8 @@ public OnPlayerSpawn(playerid)
 
 public OnPlayerDeath(playerid, killerid, reason)
 {
-	KillTimer(FLaggers_Player[playerid][FLTSet]);
 	FLaggers_Player[playerid][FLspawn] = false;
+
 		#if defined FL_FL_OnPlayerDeath
 	return FL_OnPlayerDeath(playerid, killerid, reason);
 		#else
@@ -195,8 +275,7 @@ public OnPlayerDeath(playerid, killerid, reason)
 		#endif
 }
 
-public FL_Spawned(playerid) return FLaggers_Player[playerid][FLspawn] = true;
-
+//Inner callbacks:
 public FL_CheckStats(playerid)
 {
 	new FL_PING = GetPlayerPing(playerid);
@@ -239,6 +318,7 @@ public FL_CheckStats(playerid)
 			FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
 		}
 	}
+
 	//Final-Stage filter:
 	else if(FLaggers_Player[playerid][FLspawn] && FLaggers_Player[playerid][FLwarns] >= FL_MAX_WARNINGS)
 	{
@@ -250,15 +330,7 @@ public FL_CheckStats(playerid)
 	return 1;
 }
 
-//Inner functions:
-stock IsPlayerLagging(playerid)
-{
-	if(FLaggers_Player[playerid][FLwarns] > 1) return 1;
-	else return 0;
-}
-
-stock IsPlayerDesynced(playerid) return FLaggers_Player[playerid][FLdesynced];
-
+//Hookings:
 #if defined _ALS_OnPlayerDisconnect
   #undef OnPlayerDisconnect
 #else
@@ -298,3 +370,66 @@ stock IsPlayerDesynced(playerid) return FLaggers_Player[playerid][FLdesynced];
 #endif
 
 #define OnPlayerDeath FL_OnPlayerDeath
+
+#if defined _ALS_GivePlayerWeapon
+  #undef GivePlayerWeapon
+#else
+    #define _ALS_GivePlayerWeapon
+#endif
+
+#define GivePlayerWeapon FL_GivePlayerWeapon
+
+#if defined _ALS_SetPlayerAmmo
+  #undef SetPlayerAmmo
+#else
+    #define _ALS_SetPlayerAmmo
+#endif
+
+#define SetPlayerAmmo FL_SetPlayerAmmo
+
+#if defined _ALS_ResetPlayerWeapons
+  #undef ResetPlayerWeapons
+#else
+    #define _ALS_ResetPlayerWeapons
+#endif
+
+#define ResetPlayerWeapons FL_ResetPlayerWeapons
+
+#else //if it's a filterscript
+
+//Linking to the gamemode:
+stock FLA_GivePlayerWeapon(playerid, weaponid, ammo)
+	return CallRemoteFunction("FL_GivePlayerWeapon","iii",playerid, weaponid, ammo);
+
+stock FLA_SetPlayerAmmo(playerid, weaponid, ammo)
+	return CallRemoteFunction("FL_SetPlayerAmmo","iii",playerid, weaponid, ammo);
+ 
+stock FLA_ResetPlayerWeapons(playerid)
+	return CallRemoteFunction("FL_ResetPlayerWeapons","i",playerid);
+
+//Hookings:
+#if defined _ALS_GivePlayerWeapon
+  #undef GivePlayerWeapon
+#else
+    #define _ALS_GivePlayerWeapon
+#endif
+
+#define GivePlayerWeapon FLA_GivePlayerWeapon
+
+#if defined _ALS_SetPlayerAmmo
+  #undef SetPlayerAmmo
+#else
+    #define _ALS_SetPlayerAmmo
+#endif
+
+#define SetPlayerAmmo FLA_SetPlayerAmmo
+
+#if defined _ALS_ResetPlayerWeapons
+  #undef ResetPlayerWeapons
+#else
+    #define _ALS_ResetPlayerWeapons
+#endif
+
+#define ResetPlayerWeapons FLA_ResetPlayerWeapons
+
+#endif
