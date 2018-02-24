@@ -52,8 +52,8 @@ Defeinitions to use:
 forward FL_GivePlayerWeapon(playerid, weaponid, ammo);
 forward FL_SetPlayerAmmo(playerid, weaponid, ammo);
 forward FL_ResetPlayerWeapons(playerid);
-forward FL_FixSBug(playerid);
 
+forward FL_FixSBug(playerid);
 forward FL_CheckStats(playerid);
 
 #if defined OnPlayerLagout
@@ -137,8 +137,7 @@ stock FL_GetWeaponSlot(weaponid)
 
 stock IsPlayerLagging(playerid)
 {
-	if(FLaggers_Player[playerid][FLwarns] > 1) return 1;
-	else return 0;
+	return (FLaggers_Player[playerid][FLwarns] > 1) ? true : false;
 }
 
 stock IsPlayerDesynced(playerid) return FLaggers_Player[playerid][FLdesynced];
@@ -167,11 +166,7 @@ public FL_GivePlayerWeapon(playerid, weaponid, ammo)
 }
 
 public FL_SetPlayerAmmo(playerid, weaponid, ammo)
-{
-	if(FL_GetWeaponSlot(weaponid) == 0) return SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]);
-	else SetPlayerAmmo(playerid, weaponid, ammo);
-	return 1;
-}
+	return (FL_GetWeaponSlot(weaponid) == 0) ? SetPlayerAmmo(playerid, 0, FLaggers_Player[playerid][FLAmmo]) : SetPlayerAmmo(playerid, weaponid, ammo);
 
 public FL_ResetPlayerWeapons(playerid)
 {
@@ -260,7 +255,7 @@ public FL_CheckStats(playerid)
 	new FL_PING = GetPlayerPing(playerid);
 	new Float:FL_PACKETS = FL_GetPlayerPacketloss(playerid);
 
-	if(FLaggers_Player[playerid][FLwarns] < FL_MAX_WARNINGS && FLaggers_Player[playerid][FLspawn] &&  GetTickCount() < (FLaggers_Player[playerid][FLUpdated]+2000))
+	if(FLaggers_Player[playerid][FLwarns] < FL_MAX_WARNINGS && FLaggers_Player[playerid][FLspawn] &&  GetTickCount() < (FLaggers_Player[playerid][FLUpdated]+1500))
 	{
 		//Ping filter:
 		if(FL_PING >= FL_MAX_LAG_PING && FLaggers_Player[playerid][FLPing] == INVALID_PLAYER_STATS)
@@ -285,7 +280,6 @@ public FL_CheckStats(playerid)
 		{ 
 			FLaggers_Player[playerid][FLPackets] = FL_PACKETS;
 		}
-
 		else if(FL_PACKETS > FLaggers_Player[playerid][FLPackets] && FLaggers_Player[playerid][FLPackets] != INVALID_PLAYER_STATS)
 		{
 			FLaggers_Player[playerid][FLwarns]++, 
@@ -309,11 +303,12 @@ public FL_CheckStats(playerid)
 	}
 	
 	//Desync filter:
-	if(FLaggers_Player[playerid][FLspawn] &&  GetTickCount() < (FLaggers_Player[playerid][FLUpdated]+1000))
+	if(FLaggers_Player[playerid][FLspawn] &&  GetTickCount() < (FLaggers_Player[playerid][FLUpdated]+1500))
 	{
 		new
 		    FLaggersWep,
 			FlaggersAmmo;
+
 		GetPlayerWeaponData(playerid, 0, FLaggersWep, FlaggersAmmo);
 
 		switch(FLaggers_Player[playerid][FLAmmo])
