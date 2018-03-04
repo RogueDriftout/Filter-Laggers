@@ -3,9 +3,9 @@ Laggers filter by Rogue 2018/2/21
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 Callbacks:
 -=-=-=-=-=
-OnPlayerLagout(playerid, lagtype, ping, Float:packetloss);
+OnPlayerLagout(playerid, lagtype, ping);
 -=-=-=-=-
-lagtype 1 = ping/packets lag.
+lagtype 1 = ping lag.
 lagtype 2 = packet-loss sync.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 Inner functions:
@@ -17,7 +17,6 @@ Defeinitions to use:
 -=-=-=-=-=-=-=-=-=-=
 #define FL_MAX_WAIT_TIME		[number]			( max wait time for the lags check  )
 #define FL_MAX_LAG_PING 	    [number]   			( max ping to set a warning         )
-#define FL_MAX_PACKETLOSS 	    [number] 			( max packet loss to set a warning  )
 #define FL_MAX_WARNINGS 	    [number]   			( max warnings to call the callback )
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 */
@@ -27,19 +26,17 @@ Defeinitions to use:
 #endif
 
 #define _FLaggersIncluded_
-#define INVALID_PLAYER_STATS -1
-#define FL_MAX_DESYNC_WARNS 5
 
 #include <a_samp>
 
 #if !defined FILTERSCRIPT
 
+#define INVALID_PLAYER_STATS -1
+
+#define FL_MAX_DESYNC_WARNS 6
+
 #if !defined FL_MAX_LAG_PING
 	#define FL_MAX_LAG_PING 500
-#endif
-
-#if !defined FL_MAX_PACKETLOSS
-	#define FL_MAX_PACKETLOSS 0.5
 #endif
 
 #if !defined FL_MAX_WAIT_TIME
@@ -59,7 +56,7 @@ forward FL_FixSBug(playerid);
 forward FL_CheckStats(playerid);
 
 #if defined OnPlayerLagout
-	forward OnPlayerLagout(playerid, lagtype, ping, Float:packetloss);
+	forward OnPlayerLagout(playerid, lagtype, ping);
 #endif
 
 #if defined FL_OnPlayerConnect
@@ -88,8 +85,6 @@ enum FLAGGERS_PLAYER_INFO
 	bool:FLlagger,
 	bool:FLspawn,
 
-	Float:FLPackets,
-
 	FLUpdated,
 	FLwarns,
 	FLAmmo,
@@ -104,18 +99,6 @@ new
 	FLaggers_Player[MAX_PLAYERS][FLAGGERS_PLAYER_INFO];
 
 //Inner functions:
-stock Float:FL_GetPlayerPacketloss(playerid) // Made by Fusez
-{
-    new nstats[400+1], nstats_loss[20], fstart, fend;
-
-    GetPlayerNetworkStats(playerid, nstats, sizeof(nstats));
-    fstart = strfind(nstats,"packetloss",true);
-    fend = strfind(nstats,"%",true,fstart);
-    strmid(nstats_loss, nstats, fstart+12, fend, sizeof(nstats_loss));
-
-    return floatstr(nstats_loss);
-}
-
 stock FL_GetWeaponSlot(weaponid) 
 { 
     switch(weaponid) 
@@ -163,8 +146,8 @@ public FL_GivePlayerWeapon(playerid, weaponid, ammo)
 			}
 		}
 	}
-	else GivePlayerWeapon(playerid, weaponid, ammo);
 
+	else GivePlayerWeapon(playerid, weaponid, ammo);
 	return 1;
 }
 
@@ -193,7 +176,6 @@ public OnPlayerUpdate(playerid)
 
 public OnPlayerConnect(playerid)
 {
-	FLaggers_Player[playerid][FLPackets]  = INVALID_PLAYER_STATS;
 	FLaggers_Player[playerid][FLPing] 	  = INVALID_PLAYER_STATS;
 
 	FLaggers_Player[playerid][FLspawn] 	  = false;
@@ -263,7 +245,6 @@ public FL_Cooloff(playerid)
 public FL_CheckStats(playerid)
 {
 	new FL_PING = GetPlayerPing(playerid);
-	new Float:FL_PACKETS = FL_GetPlayerPacketloss(playerid);
 
 	if(FLaggers_Player[playerid][FLspawn] &&  GetTickCount() < (FLaggers_Player[playerid][FLUpdated]+1500))
 	{
@@ -286,23 +267,6 @@ public FL_CheckStats(playerid)
 				if(FLaggers_Player[playerid][FLwarns] > 0 ) FLaggers_Player[playerid][FLwarns]--;
 				FLaggers_Player[playerid][FLPing] = INVALID_PLAYER_STATS;
 			}
-
-			//Packet-loss filter:
-			if(FL_PACKETS >= FL_MAX_PACKETLOSS && FLaggers_Player[playerid][FLPackets] == INVALID_PLAYER_STATS)
-			{ 
-				FLaggers_Player[playerid][FLPackets] = FL_PACKETS;
-			}
-			else if(FL_PACKETS > FLaggers_Player[playerid][FLPackets] && FLaggers_Player[playerid][FLPackets] != INVALID_PLAYER_STATS)
-			{
-				FLaggers_Player[playerid][FLwarns]++, 
-				FLaggers_Player[playerid][FLPackets] = FL_PACKETS;
-			}
-
-			else if(FLaggers_Player[playerid][FLPackets] != INVALID_PLAYER_STATS)
-			{
-				if(FLaggers_Player[playerid][FLwarns] > 0 ) FLaggers_Player[playerid][FLwarns]--;
-				FLaggers_Player[playerid][FLPackets] = INVALID_PLAYER_STATS;
-			}
 		}
 
 		//Final-Stage filter:
@@ -310,7 +274,7 @@ public FL_CheckStats(playerid)
 		{
 			FLaggers_Player[playerid][FLwarns] = 0;
 			#if defined OnPlayerLagout
-			OnPlayerLagout(playerid, 1, FL_PING, FL_PACKETS);
+			OnPlayerLagout(playerid, 1, FL_PING);
 			#endif
 		}
 	
@@ -336,6 +300,7 @@ public FL_CheckStats(playerid)
 					{
 						if(FLaggers_Player[playerid][FLDwarns] == 0) SetTimerEx("FL_Cooloff", 50000, false, "i", playerid);
 						FLaggers_Player[playerid][FLDwarns]++;
+						SetPlayerAmmo(playerid, FLaggersWep, FLaggers_Player[playerid][FLAmmo]);
 					}
 					FLaggers_Player[playerid][FLAmmo] = 0;
 					SetPlayerAmmo(playerid, FLaggersWep, 0);
@@ -347,7 +312,7 @@ public FL_CheckStats(playerid)
 		{
 			FLaggers_Player[playerid][FLdesynced] = true;
 			#if defined OnPlayerLagout
-			OnPlayerLagout(playerid, 2, GetPlayerPing(playerid), FL_GetPlayerPacketloss(playerid));
+			OnPlayerLagout(playerid, 2, GetPlayerPing(playerid));
 			#endif
 		}
 	}
